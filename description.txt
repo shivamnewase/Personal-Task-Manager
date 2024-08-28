@@ -1,0 +1,11 @@
+Personal Task Manager
+Description: Create a task management app where users can add, edit, delete, and mark tasks as completed.
+Features:
+User authentication and authorization
+Task CRUD operations
+Filters for completed, pending, and overdue tasks
+Due dates and reminders
+Tech Stack:
+Front-End: React
+Back-End: Node.js with Express
+Database: MongoDB
