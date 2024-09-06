@@ -1,60 +1,119 @@
 const Task = require("../db/Schema/Task");
 const apiResponse = require("../helpers/apiResponse");
-
+const mongoose = require("mongoose");
 const moment = require("moment");
+const Project = require("../db/Schema/Project");
 
 exports.createTask = async (req, res) => {
   try {
-    const { name, description, startDate, status, dueDate, reminder } = req.body;
-  
+    const {
+      name,
+      description,
+      summary,
+      startDate,
+      status,
+      dueDate,
+      reminder,
+      project,
+      priority,
+      assignee,
+      reporter,
+    } = req.body;
+
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    if (!name) {
-      return res.status(400).json({ message: "Name is required to create a task" });
+    if (!project) {
+      return res.status(400).json({ message: "Project Name is required" });
     }
 
+    if (!name) {
+      return res
+        .status(400)
+        .json({ message: "Name is required to create a task" });
+    }
+
+    const assigneeId = new mongoose.Types.ObjectId(assignee);
+    const reporterId = new mongoose.Types.ObjectId(reporter);
+
     const task = new Task({
+      project,
       user: req.user._id,
       name,
       description,
+      summary,
       startDate: moment(startDate),
-      status: status || "Pending",
+      status: status || "TO DO",
       dueDate: moment(dueDate),
       reminder: moment(reminder),
+      priority: priority || "Low",
+      assignee: assigneeId,
+      reporter: reporterId,
     });
 
-    // Save the task
-    await task.save();
+    const savedTask = await task.save();
 
-    res.status(201).json({ message: "Task added successfully...", task });
+    const populatedTask = await Task.findById(savedTask._id)
+      .populate({ path: "user", select: "-password" })
+      .populate({ path: "assignee", select: "-password" })
+      .populate({ path: "reporter", select: "-password" })
+      .exec();
+
+    await Project.updateOne(
+      {
+        _id: project,
+      },
+      {
+        $push: {
+          tasks: savedTask._id,
+        },
+      }
+    );
+
+    apiResponse.successResponseWithData(
+      res,
+      "Task added successfully...",
+      populatedTask
+    );
   } catch (error) {
-    console.error("Error creating task", error);
+    console.error("Error creating task:::", error);
     res.status(500).json({ message: "Error in creating task" });
   }
 };
 
 exports.getTasks = async (req, res) => {
   try {
-    const taskList = await Task.find();
-    apiResponse.successResponseWithData(res, "Successfully ....", taskList);
+    const taskList = await Task.find()
+      .populate({ path: "user", select: "-password" })
+      .populate({ path: "assignee", select: "-password" })
+      .populate({ path: "reporter", select: "-password" })
+      .lean();
+
+    return apiResponse.successResponseWithData(
+      res,
+      "Successfully ....",
+      taskList
+    );
   } catch (error) {
-    console.log("error finding task list");
+    console.log("error finding task list", error);
     res.status(500).json({ message: "Error Finding for task list" });
   }
 };
 
 exports.updateTask = async (req, res) => {
   try {
-    const { name, description, dueDate, reminder, status, startDate } =
-      req.body;
-    console.table({ name, description, dueDate, reminder, status, startDate });
     const update = await Task.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     });
 
-    apiResponse.successResponseWithData(res, "Successfully update", update);
+    const updatedRes = await Task.findById(update._id)
+      .populate({ path: "user", select: "-password" })
+      .populate({ path: "assignee", select: "-password" })
+      .populate({ path: "reporter", select: "-password" })
+      .lean();
+
+    apiResponse.successResponseWithData(res, "Successfully update", updatedRes);
   } catch (error) {
     res.status(500).json({ message: "Error in update task" });
   }

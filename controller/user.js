@@ -42,11 +42,23 @@ exports.createUser = async (req, res) => {
   });
 };
 
+exports.getUserList = async (req, res) => {
+  try {
+    const userList = await User.find();
+    console.log("userList", userList);
+
+    apiResponse.successResponseWithData(res, "Successfully ...", userList);
+  } catch (error) {
+    console.log("Error", error);
+  }
+};
+
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
     const user = await User.findOne({ email: email });
+    console.log("🚀 ~ exports.loginUser= ~ user:", user);
 
     if (!user) {
       res.status(404).json({ message: "User Not found" });
@@ -61,10 +73,20 @@ exports.loginUser = async (req, res) => {
     const token = jwt.sign({ id: user._id }, process.env.SECRET_KEY, {
       expiresIn: process.env.EXPIREIN,
     });
+
+    const updatedUser = {
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      _id: user._id,
+    };
+
     apiResponse.loginSucssesResponseWithData(
       res,
       "user Logged in successfully",
-      user,
+      updatedUser,
       token
     );
   } catch (error) {
@@ -96,18 +118,17 @@ exports.updateUser = async (req, res) => {
     if (!userDetail) {
       return res.status(400).json({ message: "User Not Exists" });
     } else {
-      
-      bcrypt.genSalt(10, (err, salt)=>{
-        if(err){
+      bcrypt.genSalt(10, (err, salt) => {
+        if (err) {
           console.log("error generating salt", error);
         }
 
-        bcrypt.hash(password, salt,(err, hash)=>{
-            if(err){
-              console.log("error hashing password", error);
-            }
-        })
-      })
+        bcrypt.hash(password, salt, (err, hash) => {
+          if (err) {
+            console.log("error hashing password", error);
+          }
+        });
+      });
       await User.updateOne(userBody);
       apiResponse.successResponseWithData(
         res,
