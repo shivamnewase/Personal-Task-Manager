@@ -6,6 +6,7 @@ const countrySchema = new mongoose.Schema({
     code: {type:String, unique:true, required: true},
     language:String,
     currencies:String
+    
 })
 
 module.exports = mongoose.model("Country", countrySchema)
