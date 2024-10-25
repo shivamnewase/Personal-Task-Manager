@@ -5,7 +5,7 @@ const db = require("./db");
 const bodyParser = require("body-parser");
 const Router = require("./routes");
 const apiResponse = require("./helpers/apiResponse");
-const { job } = require("./cronjob/cronjob");
+const { jobIST } = require("./cronjob/cronjob");
 const cors = require("cors");
 
 app.use(cors());
@@ -19,12 +19,19 @@ app.use(cors());
 
 app.use(express.json());
 
-
 app.use("/api", Router);
+app.use('/api/folders', folderRoutes);
 
 app.get("/", (req, res) => {
   apiResponse.normalResponse(res, "API Working...");
 });
+
+if (jobIST) {
+  jobIST.start();
+} else {
+  console.error("Cron job is not defined.");
+}
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });

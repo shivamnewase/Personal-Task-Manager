@@ -1,42 +1,93 @@
 const { CronJob } = require("cron");
 const moment = require("moment");
 const Task = require("../db/Schema/Task");
+const { senderMail } = require("../mail/sender");
 const express = require("express");
 const app = express.Router();
-const { senderMail } = require("../mail/sender");
 
+// Function to check tasks and send emails
 async function checkTasks() {
   try {
-    const tasks = await Task.find({
-      reminder: { $exists: true, $ne: null },
-      dueDate: { $exists: true, $ne: null },
+    // Get the current date in YYYY-MM-DD format
+    const currentDate = new Date();;
+    console.log("Current Date:", currentDate.toISOString().split("T")[0]);
+
+    // Fetch tasks and populate the project field
+    const taskData = await Task.find({
+      project: { $ne: null },
       status: { $ne: "DONE" },
-    });
+      dueDate: { $ne: null },
+    })
+    .populate({
+      path: 'project',
+      match: { emailOnTaskDueDate: true },
+      select: '-tasks',
+    })
+    .exec();
 
-    for (const task of tasks) {
-      const dueDate = moment.utc(task.dueDate);
-
-      const currentDateUtc = new Date();
-      const date = moment(currentDateUtc);
-
-      const dateInLocalTimezone = moment.parseZone(date.format());
-
-      const formattedDate = dateInLocalTimezone.format(
-        "YYYY-MM-DDTHH:mm:ss[Z]"
-      );
-
-      if (formattedDate == dueDate.format()) {
-        console.log("tasks");
-        await senderMail(task);
+    // Iterate over tasks to check due dates
+    for (const task of taskData) {
+      const dueDate = new Date(task.dueDate);
+   
+      // console.log("🚀 ~ checkTasks ~ date:", date)
+      // Check if the current date is greater than or equal to the due date
+      if (currentDate < dueDate) {
+        // console.log("Sending email for task due on:", dueDate.toISOString().split("T")[0]);
+        // await senderMail(task); // Send email
+      } else {
+        // console.log("Task due on", dueDate.toISOString().split("T")[0], "is not yet due.");
       }
     }
-    return [];
   } catch (error) {
-    console.error("Error checking tasks", error);
+    console.error("Error checking tasks:", error);
   }
 }
 
-// Create a new cron job to run every 1 sec in IST
-const job = new CronJob("* * * * * *", checkTasks, null, true, "Asia/Kolkata");
+// Create a new cron job to run daily at 6 PM in different time zones
 
-module.exports = { job };
+// India Standard Time (IST)
+const jobIST = new CronJob(
+  "0 * * * * *", // Cron expression for 6 AM
+  checkTasks,
+  null,
+  true,
+  "Asia/Kolkata" // Time zone for IST
+);
+
+// Eastern Time (ET)
+const jobET = new CronJob(
+  "0 18 * * *", // Cron expression for 6 PM
+  checkTasks,
+  null,
+  true,
+  "America/New_York" // Time zone for ET
+);
+
+// Greenwich Mean Time (GMT) / British Summer Time (BST)
+const jobGMT = new CronJob(
+  "0 18 * * *", // Cron expression for 6 PM
+  checkTasks,
+  null,
+  true,
+  "Europe/London" // Time zone for GMT/BST
+);
+
+// Japan Standard Time (JST)
+const jobJST = new CronJob(
+  "0 18 * * *", // Cron expression for 6 PM
+  checkTasks,
+  null,
+  true,
+  "Asia/Tokyo" // Time zone for JST
+);
+
+// Australian Eastern Time (AET)
+const jobAET = new CronJob(
+  "0 18 * * *", // Cron expression for 6 PM
+  checkTasks,
+  null,
+  true,
+  "Australia/Sydney" // Time zone for AET
+);
+
+module.exports = { jobIST, jobET, jobGMT, jobJST, jobAET };

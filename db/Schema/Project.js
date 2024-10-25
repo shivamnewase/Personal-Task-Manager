@@ -34,10 +34,21 @@ const projectSchema = new mongoose.Schema(
         return this.type === "project";
       },
     },
+    emailOnTaskDueDate: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
     tasks: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Task",
+      },
+    ],
+    users: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
       },
     ],
   },

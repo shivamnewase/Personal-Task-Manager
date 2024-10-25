@@ -55,7 +55,8 @@ exports.getUserList = async (req, res) => {
 
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
-
+  console.log("🚀 ~ exports.loginUser= ~ email:", email);
+  console.log("🚀 ~ exports.loginUser= ~ password:", password);
   try {
     const user = await User.findOne({ email: email });
     console.log("🚀 ~ exports.loginUser= ~ user:", user);
@@ -90,7 +91,7 @@ exports.loginUser = async (req, res) => {
       token
     );
   } catch (error) {
-    console.log("error finding for user", error);
+    console.log("error finding for user::::", error);
     res.status(500).json({ message: "Error finding user" });
   }
 };

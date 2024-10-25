@@ -25,7 +25,7 @@ exports.createTask = async (req, res) => {
     }
 
     if (!project) {
-      return res.status(400).json({ message: "Project Name is required" });
+      return res.status(400).json({ message: "Project is required" });
     }
 
     if (!name) {
@@ -37,19 +37,54 @@ exports.createTask = async (req, res) => {
     const assigneeId = new mongoose.Types.ObjectId(assignee);
     const reporterId = new mongoose.Types.ObjectId(reporter);
 
+    const formattedStartDate = startDate
+      ? moment(startDate).toISOString()
+      : null;
+    const formattedDueDate = dueDate ? moment(dueDate).toISOString() : null;
+    const formattedReminder = reminder ? moment(reminder).toISOString() : null;
+
+    // Retrieve project information
+    const projectDoc = await Project.findById(project);
+    console.log("🚀 ~ exports.createTask= ~ projectDoc:", projectDoc);
+    if (!projectDoc) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+    if (projectDoc.emailOnTaskDueDate && !dueDate) {
+      return res
+        .status(400)
+        .json({ message: "Due date is required for create Task" });
+    }
+
+    // Find the latest task number for the project (if needed)
+    const lastTask = await Task.findOne({ project })
+      .sort({ taskNumber: -1 })
+      .exec();
+    let taskNumber;
+    if (!lastTask) {
+      taskNumber = `${projectDoc.projectName.slice(0, 3).toUpperCase()}-01`;
+    } else {
+      const lastTaskNumber = parseInt(lastTask.taskNumber.split("-")[1], 10);
+      const newTaskNumber = lastTaskNumber + 1;
+      taskNumber = `${projectDoc.projectName
+        .slice(0, 3)
+        .toUpperCase()}-${String(newTaskNumber).padStart(2, "0")}`;
+    }
+
+    // Create the new task
     const task = new Task({
       project,
       user: req.user._id,
       name,
       description,
       summary,
-      startDate: moment(startDate),
+      startDate: formattedStartDate,
       status: status || "TO DO",
-      dueDate: moment(dueDate),
-      reminder: moment(reminder),
+      dueDate: formattedDueDate,
+      reminder: formattedReminder,
       priority: priority || "Low",
       assignee: assigneeId,
       reporter: reporterId,
+      taskNumber, // Save the task number if implemented
     });
 
     const savedTask = await task.save();
@@ -61,33 +96,50 @@ exports.createTask = async (req, res) => {
       .exec();
 
     await Project.updateOne(
-      {
-        _id: project,
-      },
-      {
-        $push: {
-          tasks: savedTask._id,
-        },
-      }
+      { _id: project },
+      { $push: { tasks: savedTask._id } }
     );
 
-    apiResponse.successResponseWithData(
-      res,
-      "Task added successfully...",
-      populatedTask
-    );
+    res.status(201).json({
+      message: "Task added successfully...",
+      task: populatedTask,
+    });
   } catch (error) {
     console.error("Error creating task:::", error);
-    res.status(500).json({ message: "Error in creating task" });
+    res.status(500).json({ message: "Error creating task" });
   }
 };
 
 exports.getTasks = async (req, res) => {
   try {
     const taskList = await Task.find()
-      .populate({ path: "user", select: "-password" })
+      // .populate({ path: "user", select: "-password" })
+      .populate({ path: "project", select: "-tasks" })
       .populate({ path: "assignee", select: "-password" })
       .populate({ path: "reporter", select: "-password" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return apiResponse.successResponseWithData(
+      res,
+      "Successfully ....",
+      taskList
+    );
+  } catch (error) {
+    console.log("error finding task list", error);
+    res.status(500).json({ message: "Error Finding for task list" });
+  }
+};
+
+exports.findTasks = async (req, res) => {
+  const projectId = req.body;
+  try {
+    const taskList = await Task.findOne({ project: projectId })
+      // .populate({ path: "user", select: "-password" })
+      .populate({ path: "project", select: "-tasks" })
+      .populate({ path: "assignee", select: "-password" })
+      .populate({ path: "reporter", select: "-password" })
+      .sort({ createdAt: -1 })
       .lean();
 
     return apiResponse.successResponseWithData(
@@ -103,37 +155,65 @@ exports.getTasks = async (req, res) => {
 
 exports.updateTask = async (req, res) => {
   try {
-    const update = await Task.findByIdAndUpdate(req.params.id, req.body, {
+    // Destructure taskId and other properties from req.body
+    const { taskId, ...updateData } = req.body;
+    
+    const updatedTask = await Task.findByIdAndUpdate(taskId, updateData, {
       new: true,
     });
 
-    const updatedRes = await Task.findById(update._id)
+    // Check if the task was found and updated
+    if (!updatedTask) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    // Populate the necessary fields
+    const updatedRes = await Task.findById(updatedTask._id)
       .populate({ path: "user", select: "-password" })
       .populate({ path: "assignee", select: "-password" })
       .populate({ path: "reporter", select: "-password" })
       .lean();
 
-    apiResponse.successResponseWithData(res, "Successfully update", updatedRes);
+    // Send a success response with the updated data
+    apiResponse.successResponseWithData(
+      res,
+      "Successfully updated",
+      updatedRes
+    );
   } catch (error) {
-    res.status(500).json({ message: "Error in update task" });
+    console.error(error); // Log the error for debugging
+    res.status(500).json({ message: "Error in updating task" });
   }
 };
 
 exports.deleteTask = async (req, res) => {
+  console.log("🚀 ~ exports.deleteTask ~ req:", req);
   try {
-    const deleteRec = await Task.deleteOne({ _id: req.params.id });
+    const { projectId, taskIds } = req.body; 
 
-    if (deleteRec.deletedCount == 1) {
-      const data = await Task.find();
+    // Ensure taskIds is an array
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      return res.status(400).json({ message: "No task IDs provided" });
+    }
+
+    // Delete tasks that belong to the specified project
+    const deleteRec = await Task.deleteMany({
+      _id: { $in: taskIds },
+      projectId: projectId // Assuming each task has a projectId field
+    });
+
+    if (deleteRec.deletedCount > 0) {
+      const data = await Task.find({ projectId }); // Fetch remaining tasks for the project
       apiResponse.successResponseWithData(
         res,
-        "Task Delete Successfully...",
+        "Tasks deleted successfully...",
         data
       );
     } else {
-      return res.status(200).json({ message: "records Not found To delete" });
+      return res.status(200).json({ message: "No records found to delete" });
     }
   } catch (error) {
-    return res.status(500).json({ message: "error For deleting task" });
+    console.error("Error deleting task:", error);
+    return res.status(500).json({ message: "Error deleting task" });
   }
 };

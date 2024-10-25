@@ -1,9 +1,9 @@
 const mongoose = require("mongoose");
 
 const taskSchema = new mongoose.Schema({
-  project:{
+  project: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Project',
+    ref: "Project",
     required: true,
   },
   name: {
@@ -18,7 +18,7 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["PROCESS", "REVIEW", "DONE"],
+    enum: ["PROCESS", "REVIEW", "DONE", "TO DO"],
     default: "TO DO",
   },
   startDate: {
@@ -51,6 +51,11 @@ const taskSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-});
+  taskNumber: {
+    type: String,
+    required: true,
+    unique: true
+  },
+}, { timestamps: true }); // Enable built-in timestamps
 
 module.exports = mongoose.model("Task", taskSchema);
